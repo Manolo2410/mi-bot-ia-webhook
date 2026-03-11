@@ -1,86 +1,123 @@
-# webhook.py
-import json
 import os
+import json
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# --- Configuración de la IA (Gemini) ---
-# ¡IMPORTANTE! En un proyecto real, usa variables de entorno.
-# Por ahora, para pruebas locales, puedes poner tu API KEY aquí.
-# API_KEY = "YOUR_GEMINI_API_KEY"  # <-- PON TU API KEY AQUÍ
-# Es mejor usar una variable de entorno por seguridad.
-API_KEY = os.environ.get("AIzaSyDlIZ_YpeU2fVdIF-1TbgZgFhQYEdh7rGY")
+# --- MÉTODO SUPER ROBUSTO PARA OBTENER LA API KEY ---
+def get_api_key():
+    """Intenta obtener la API key de múltiples fuentes"""
+    
+    # Fuente 1: Variable de entorno normal
+    key = os.environ.get("GEMINI_API_KEY")
+    if key:
+        print("✅ Key encontrada en GEMINI_API_KEY")
+        return key
+    
+    # Fuente 2: Variable con otro nombre
+    key = os.environ.get("GEMINI_KEY")
+    if key:
+        print("✅ Key encontrada en GEMINI_KEY")
+        return key
+    
+    # Fuente 3: Variable genérica
+    key = os.environ.get("API_KEY")
+    if key:
+        print("✅ Key encontrada en API_KEY")
+        return key
+    
+    # Fuente 4: Archivo de configuración (para debugging)
+    try:
+        with open('api_key.txt', 'r') as f:
+            key = f.read().strip()
+            print("✅ Key encontrada en archivo api_key.txt")
+            return key
+    except:
+        pass
+    
+    # Fuente 5: VALOR HARCODEADO (solo para pruebas)
+    # ¡COMENTAR EN PRODUCCIÓN!
+    key = "AIzaSyDlIZ_YpeU2fVdIF-1TbgZgFhQYEdh7rGY"
+    print("⚠️ USANDO KEY HARCODEADA - SOLO PARA PRUEBAS")
+    return key
+
+# Obtener la API key
+API_KEY = get_api_key()
+
 if not API_KEY:
-    print("ERROR: La variable de entorno GEMINI_API_KEY no está configurada.")
-    # En un despliegue, esto fallaría. Para pruebas locales, puedes hardcodearla temporalmente.
-    # API_KEY = "AIza..." # Descomenta y pega tu key SOLO PARA PRUEBAS LOCALES.
+    print("❌ ERROR CRÍTICO: No se pudo encontrar la API key")
+    model = None
+else:
+    try:
+        print(f"🔑 Configurando Gemini con key: {API_KEY[:10]}...")
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        print("✅ Gemini configurado correctamente")
+    except Exception as e:
+        print(f"❌ Error configurando Gemini: {e}")
+        model = None
 
-genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash') # Modelo gratuito y rápido
-# -----------------------------------------
+# Rutas de prueba
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "ok",
+        "message": "Webhook funcionando",
+        "modelo_listo": model is not None
+    })
 
-# Ruta principal que Dialogflow llamará
+@app.route('/debug-env')
+def debug_env():
+    """Muestra información de depuración"""
+    import sys
+    return jsonify({
+        "variables_entorno": list(os.environ.keys()),
+        "api_key_encontrada": API_KEY is not None,
+        "api_key_preview": API_KEY[:10] + "..." if API_KEY else None,
+        "modelo_listo": model is not None,
+        "python_version": sys.version
+    })
+
+# Webhook principal
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # 1. Obtener la solicitud de Dialogflow
         req = request.get_json(silent=True, force=True)
-        print("Solicitud recibida de Dialogflow:") # Para depurar
-        # print(json.dumps(req, indent=2)) # Descomenta para ver el JSON completo
-
-        # 2. Extraer la consulta del usuario
+        
+        # Extraer consulta
         query_text = req.get('queryResult', {}).get('queryText', '')
-        # Si configuraste un parámetro, puedes extraerlo para más precisión:
-        # user_question = req['queryResult']['parameters']['consulta_usuario']
-        # Por simplicidad, usaremos todo el texto de la consulta.
-        user_question = query_text
-        print(f"Pregunta del usuario: {user_question}")
-
-        # 3. Llamar a la API de Gemini (o la que elijas)
-        if not API_KEY:
-            ai_response_text = "Lo siento, la IA no está configurada correctamente."
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        user_question = parameters.get('consulta_usuario') or query_text
+        
+        if not API_KEY or model is None:
+            respuesta = "Lo siento, la IA no está configurada. (Error de configuración)"
         else:
             try:
-                # Instrucción de sistema para darle un poco de personalidad/contexto al bot
-                prompt = f"Eres un asistente amigable y servicial. Responde a la siguiente pregunta de un cliente de cigarros: {user_question}"
+                prompt = f"Responde como experto en cigarros: {user_question}"
                 response = model.generate_content(prompt)
-                ai_response_text = response.text
-                print(f"Respuesta de la IA: {ai_response_text}")
+                respuesta = response.text
             except Exception as e:
-                print(f"Error llamando a la API de Gemini: {e}")
-                ai_response_text = "Lo siento, tuve un problema al contactar con mi inteligencia central."
-
-        # 4. Formatear la respuesta para Dialogflow
-        # Dialogflow espera un JSON específico.
-        reply = {
+                respuesta = f"Error con la IA: {str(e)}"
+        
+        return jsonify({
             "fulfillmentMessages": [
-                {
-                    "text": {
-                        "text": [ai_response_text]
-                    }
-                }
+                {"text": {"text": [respuesta]}}
             ]
-        }
-
-        # 5. Enviar la respuesta de vuelta a Dialogflow
-        return jsonify(reply)
-
+        })
+        
     except Exception as e:
-        print(f"Error en el webhook: {e}")
-        # Enviar un mensaje de error genérico de vuelta a Dialogflow
-        error_reply = {
+        return jsonify({
             "fulfillmentMessages": [
-                {
-                    "text": {
-                        "text": ["Lo siento, ocurrió un error interno en el bot."]
-                    }
-                }
+                {"text": {"text": [f"Error: {str(e)}"]}}
             ]
-        }
-        return jsonify(error_reply)
+        })
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port)
 
 # Punto de entrada para ejecutar la app localmente
 if __name__ == '__main__':
+
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001)))
