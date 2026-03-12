@@ -9,8 +9,6 @@ app = Flask(__name__)
 # --- Configuración de OpenRouter ---
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# Para pruebas locales, puedes descomentar esto:
-# OPENROUTER_API_KEY = "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"
 
 if not OPENROUTER_API_KEY:
     print("❌ ERROR: Variable OPENROUTER_API_KEY no configurada")
