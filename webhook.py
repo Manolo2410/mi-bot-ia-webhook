@@ -21,13 +21,14 @@ else:
 # --------------------------------------
 
 def llamar_grok(pregunta):
-    """Función para llamar a Grok vía OpenRouter usando requests directamente"""
+    """Función mejorada con headers adicionales"""
     
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://mi-bot-ia-webhook.onrender.com",
-        "X-Title": "Chatbot de Cigarros"
+        "X-Title": "Chatbot de Cigarros El Humo Perfecto",
+        "User-Agent": "Mozilla/5.0 (compatible; Chatbot-Cigarros/1.0; +https://mi-bot-ia-webhook.onrender.com)"
     }
     
     data = {
