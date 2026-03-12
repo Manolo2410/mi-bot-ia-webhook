@@ -21,13 +21,14 @@ else:
 # --------------------------------------
 
 def llamar_grok(pregunta):
-    """Función para llamar a Grok vía OpenRouter usando requests directamente"""
+    """Función mejorada con headers adicionales"""
     
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://mi-bot-ia-webhook.onrender.com",
-        "X-Title": "Chatbot de Cigarros"
+        "X-Title": "Chatbot de Cigarros El Humo Perfecto",
+        "User-Agent": "Mozilla/5.0 (compatible; Chatbot-Cigarros/1.0; +https://mi-bot-ia-webhook.onrender.com)"
     }
     
     data = {
@@ -160,3 +161,4 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     print(f"🚀 Servidor iniciando en puerto {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
+
